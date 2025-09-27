@@ -162,15 +162,18 @@
                 const tags = book.tags || book.tagNames || [];
                 const bookId = book.bookId || book.bookid;
 
+                // Memaksa Tampilan Total Episode menjadi 100 untuk card
+                const displayedChapterCount = 100;
+
                 return `
-                    <a href="#" onclick="event.preventDefault(); navigateToDetail('${bookId}', 0, {bookName: '${book.bookName}', introduction: '${(book.introduction || '').replace(/'/g, "\\'")}'});" 
+                    <a href="#" onclick="event.preventDefault(); navigateToDetail('${bookId}', 0, {bookName: '${book.bookName}', introduction: '${(book.introduction || '').replace(/'/g, "\\'")}', chapterCount: ${book.chapterCount || displayedChapterCount}});" 
                        class="block bg-white rounded-xl shadow-xl overflow-hidden cursor-pointer transform hover:scale-[1.03] transition duration-300 ease-in-out hover:shadow-2xl animate-fade-in" style="animation-delay: ${index * 0.05}s;">
                         <div class="relative overflow-hidden">
                             <img src="${book.coverWap || book.cover}" alt="${book.bookName}" 
                                  class="w-full h-64 object-cover transition duration-500 ease-in-out transform hover:scale-105">
                             <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
                                 <p class="text-xs text-white font-semibold">
-                                    <i class="fas fa-video mr-1 text-red-400"></i> ${book.chapterCount || '??'} Eps
+                                    <i class="fas fa-video mr-1 text-red-400"></i> ${displayedChapterCount} Eps
                                 </p>
                             </div>
                             ${book.corner ? `<span class="absolute top-2 right-2 text-xs font-bold px-3 py-1 rounded-full shadow-lg" style="${cornerStyle}">${book.corner.name}</span>` : ""}
@@ -196,75 +199,6 @@
         }
 
         // --- DETAIL & VIDEO PLAYER FUNCTIONS ---
-        // Menampilkan video player dan daftar episode
-        function renderDetailPage(bookData, selectedEpisodeIndex = 0) {
-            const episodes = bookData.chapterList || [];
-
-            // Pastikan selectedEpisode selalu ada (episode yang dipilih, atau episode 0 sebagai fallback)
-            const selectedEpisode = episodes[selectedEpisodeIndex] || episodes[0];
-
-            // Dapatkan URL video dan poster dengan pengecekan null yang aman
-            const videoUrl = selectedEpisode ? getBestVideoUrl(selectedEpisode) : null;
-
-            // --- PERBAIKAN 1: Menambahkan Fallback yang Aman untuk Poster dan Nama ---
-            const videoPoster = selectedEpisode?.chapterImg || bookData.cover || '';
-            const episodeName = selectedEpisode?.chapterName || `EP ${selectedEpisodeIndex + 1}`;
-
-            const episodeButtons = episodes.map((ep, index) => {
-                const isActive = index === selectedEpisodeIndex;
-                const activeClass = isActive
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-white text-gray-700 hover:bg-blue-50 border border-gray-300';
-
-                // Panggil navigateToDetail dengan episode index yang baru
-                return `
-            <button onclick="navigateToDetail('${bookData.bookid}', ${index})" 
-                class="px-4 py-2 text-sm font-semibold rounded-lg transition duration-200 ${activeClass}">
-                ${ep.chapterName || `EP ${index + 1}`}
-            </button>
-        `;
-            }).join('');
-
-            mainContainer.innerHTML = `
-        <div class="flex items-center mb-6">
-            <button onclick="navigateTo('home')" class="text-blue-600 hover:text-blue-800 mr-3 text-lg">
-                <i class="fas fa-arrow-left"></i> Kembali ke Beranda
-            </button>
-        </div>
-
-        <h1 class="text-3xl font-extrabold text-gray-900 mb-6">${bookData.bookName}</h1>
-
-        <div class="grid lg:grid-cols-3 gap-8">
-            <div class="lg:col-span-2">
-                <div class="video-container">
-                    ${videoUrl
-                    // Menggunakan variabel videoPoster yang aman
-                    ? `<video controls poster="${videoPoster}" class="rounded-xl shadow-2xl" autoplay>
-                                <source src="${videoUrl}" type="video/mp4">
-                                Browser Anda tidak mendukung tag video.
-                            </video>`
-                    // Menggunakan variabel episodeName yang aman
-                    : `<div class="w-full h-full flex items-center justify-center bg-gray-800 text-white text-lg rounded-xl">Video untuk ${episodeName} tidak tersedia.</div>`
-                }
-                </div>
-                
-                <div class="mt-6 p-6 bg-white rounded-xl shadow-lg">
-                    <h2 class="text-xl font-bold text-gray-900 mb-3">${episodeName}</h2>
-                    <p class="text-gray-600 text-sm line-clamp-4">${bookData.introduction || 'Tidak ada deskripsi drama.'}</p>
-                </div>
-            </div>
-            
-            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg">
-                <h3 class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Daftar Episode (${episodes.length} Total)</h3>
-                
-                <div class="flex flex-wrap gap-2 overflow-y-auto-episodes"> 
-                    ${episodeButtons}
-                </div>
-            </div>
-        </div>
-    `;
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
         // Fungsi untuk memilih URL video kualitas terbaik (default 720p)
         function getBestVideoUrl(episode) {
             if (!episode || !episode.cdnList || episode.cdnList.length === 0) return null;
@@ -281,6 +215,128 @@
             return bestVideo ? bestVideo.videoPath : null;
         }
 
+        // Menampilkan video player dan daftar episode (SUDAH DIMODIFIKASI UNTUK NAVIGASI DAN TOTAL EPISODE)
+        function renderDetailPage(bookData, selectedEpisodeIndex = 0) {
+            const episodes = bookData.chapterList || [];
+
+            // Pastikan selectedEpisode selalu ada
+            const selectedEpisode = episodes[selectedEpisodeIndex] || episodes[0];
+
+            // Dapatkan URL video dan poster dengan pengecekan null yang aman
+            const videoUrl = selectedEpisode ? getBestVideoUrl(selectedEpisode) : null;
+
+            const videoPoster = selectedEpisode?.chapterImg || bookData.cover || '';
+            const episodeName = selectedEpisode?.chapterName || `EP ${selectedEpisodeIndex + 1}`;
+
+            // --- FUNGSI NAVIGASI EPISODE BARU & TOTAL EPISODE DISPLAY ---
+            // Di sini kita menggunakan 100 sebagai total episode yang ditampilkan
+            const totalEpisodes = 100; // *FORCE DISPLAYED TOTAL EPISODES TO 100*
+            const actualLoadedEpisodes = episodes.length;
+
+            const hasPrevious = selectedEpisodeIndex > 0;
+            // Next episode hanya bisa dilanjutkan jika episode selanjutnya ada dalam daftar yang di-load (actualLoadedEpisodes)
+            // ATAU jika kita ingin tombol tetap aktif sampai 100 (tapi tidak ada data yang akan diputar)
+            // Kita gunakan logika yang aman: hanya bisa lanjut jika ada episode yang di-load
+            const hasNext = selectedEpisodeIndex < actualLoadedEpisodes - 1; 
+
+            const prevEpisodeIndex = hasPrevious ? selectedEpisodeIndex - 1 : selectedEpisodeIndex;
+            const nextEpisodeIndex = hasNext ? selectedEpisodeIndex + 1 : selectedEpisodeIndex;
+            // ------------------------------------
+
+            const episodeButtons = [];
+            // Buat tombol untuk setiap episode yang benar-benar ada di data API (actualLoadedEpisodes)
+            for (let index = 0; index < actualLoadedEpisodes; index++) {
+                const ep = episodes[index];
+                const isActive = index === selectedEpisodeIndex;
+                const activeClass = isActive
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-white text-gray-700 hover:bg-blue-50 border border-gray-300';
+
+                episodeButtons.push(`
+                    <button onclick="navigateToDetail('${bookData.bookid}', ${index})" 
+                        class="px-4 py-2 text-sm font-semibold rounded-lg transition duration-200 ${activeClass}">
+                        ${ep.chapterName || `EP ${index + 1}`}
+                    </button>
+                `);
+            }
+            
+            // Tambahkan tombol episode yang tidak dimuat (untuk mencapai total 100), jika diperlukan
+            if (actualLoadedEpisodes < totalEpisodes) {
+                for (let index = actualLoadedEpisodes; index < totalEpisodes; index++) {
+                    episodeButtons.push(`
+                        <button disabled title="Episode belum tersedia"
+                            class="px-4 py-2 text-sm font-semibold rounded-lg transition duration-200 bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-300">
+                            EP ${index + 1} (Segera)
+                        </button>
+                    `);
+                }
+            }
+
+
+            mainContainer.innerHTML = `
+            <div class="flex items-center mb-6">
+                <button onclick="navigateTo('home')" class="text-blue-600 hover:text-blue-800 mr-3 text-lg">
+                    <i class="fas fa-arrow-left"></i> Kembali ke Beranda
+                </button>
+            </div>
+
+            <h1 class="text-3xl font-extrabold text-gray-900 mb-6">${bookData.bookName}</h1>
+
+            <div class="grid lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2">
+                    <div class="video-container">
+                        ${videoUrl
+                            // Menggunakan variabel videoPoster yang aman
+                            ? `<video id="videoPlayer" controls poster="${videoPoster}" class="rounded-xl shadow-2xl" autoplay>
+                                    <source src="${videoUrl}" type="video/mp4">
+                                    Browser Anda tidak mendukung tag video.
+                                </video>`
+                            // Menggunakan variabel episodeName yang aman
+                            : `<div class="w-full h-full flex items-center justify-center bg-gray-800 text-white text-lg rounded-xl">Video untuk ${episodeName} tidak tersedia.</div>`
+                        }
+                    </div>
+                    
+                    <div class="mt-4 flex justify-between space-x-4">
+                        <button ${!hasPrevious ? 'disabled' : ''} 
+                                onclick="navigateToDetail('${bookData.bookid}', ${prevEpisodeIndex})"
+                                class="flex-1 px-4 py-2 bg-gray-300 text-gray-800 font-semibold rounded-lg transition duration-200 
+                                    ${hasPrevious ? 'hover:bg-blue-500 hover:text-white' : 'opacity-50 cursor-not-allowed'}">
+                            <i class="fas fa-step-backward mr-2"></i> Episode Sebelumnya
+                        </button>
+
+                        <button ${!hasNext ? 'disabled' : ''} 
+                                onclick="navigateToDetail('${bookData.bookid}', ${nextEpisodeIndex})"
+                                class="flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg transition duration-200 
+                                    ${hasNext ? 'hover:bg-blue-700' : 'opacity-50 cursor-not-allowed'}">
+                            Episode Selanjutnya <i class="fas fa-step-forward ml-2"></i>
+                        </button>
+                    </div>
+                    <div class="mt-6 p-6 bg-white rounded-xl shadow-lg">
+                        <h2 class="text-xl font-bold text-gray-900 mb-3">${episodeName}</h2>
+                        <p class="text-gray-600 text-sm line-clamp-4">${bookData.introduction || 'Tidak ada deskripsi drama.'}</p>
+                    </div>
+                </div>
+                
+                <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg">
+                    <h3 class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Daftar Episode (${totalEpisodes} Total)</h3>
+                    
+                    <div class="flex flex-wrap gap-2 overflow-y-auto-episodes"> 
+                        ${episodeButtons.join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            // Opsional: Logika Auto-play ke episode selanjutnya
+            const videoElement = document.getElementById('videoPlayer');
+            if (videoElement && hasNext) {
+                videoElement.addEventListener('ended', () => {
+                    // Panggil fungsi untuk memuat episode selanjutnya
+                    navigateToDetail(bookData.bookid, nextEpisodeIndex);
+                });
+            }
+        }
 
         // MODIFIKASI FUNGSI fetchDetailData
         async function fetchDetailData(bookId, episodeIndex = 0, initialMetadata = {}) {
@@ -299,10 +355,7 @@
 
             // 3. Jika belum ada di cache, lakukan Fetch API
             try {
-                // --- PERUBAHAN KRITIS DI SINI ---
                 // Panggil API dengan episode yang diklik (episodeNumber) atau episode 1 (default) 
-                // untuk mendapatkan data detail buku dan chapterList lengkap.
-                // NOTE: Kita asumsikan API mengembalikan chapterList LENGKAP di fetch ini.
                 const response = await fetch(`${API_BASE}/stream?bookid=${bookId}&episode=${episodeNumber}`);
                 const json = await response.json();
 
@@ -539,7 +592,7 @@
                 }
             } catch (err) {
                 console.error(err);
-                mainContainer.innerHTML = "<p class='col-span-full text-center text-xl text-red-600 p-10'><i class='fas fa-server mr-2'></i> Gagal terhubung ke server. Pastikan server lokal berjalan (http://localhost:3000).</p>";
+                mainContainer.innerHTML = "<p class='col-span-full text-center text-xl text-red-600 p-10'><i class='fas fa-server mr-2'></i> Gagal terhubung atau kesalahan server.</p>";
             }
         }
 
@@ -584,7 +637,7 @@
 
             } catch (err) {
                 console.error(err);
-                mainContainer.innerHTML = `<p class="col-span-full text-center text-xl text-red-600 p-10"><i class="fas fa-server mr-2"></i> Gagal terhubung ke server. Pastikan server lokal berjalan (http://localhost:3000).</p>`;
+                mainContainer.innerHTML = `<p class="col-span-full text-center text-xl text-red-600 p-10"><i class="fas fa-server mr-2"></i> Gagal terhubung atau kesalahan server.</p>`;
             }
         }
 
@@ -656,4 +709,3 @@
 
 
 </html>
-
