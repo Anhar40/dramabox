@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DramaBox - Gratis</title>
+    <title>DramaBox - App Tunggal</title>
     <script>
         tailwind.config = {
             theme: {
@@ -128,7 +128,6 @@
         const perPage = 10;
         const maxPagesToShow = 5;
         let cachedBookData = {}; // Cache untuk menyimpan daftar bab (chapterList) agar tidak perlu fetch berulang kali.
-        const DISPLAY_TOTAL_EPISODES = 100; // Jumlah episode yang akan ditampilkan (untuk navigasi)
 
         // --- UTILITY FUNCTIONS & RENDER ---
 
@@ -152,7 +151,7 @@
             return html;
         }
 
-        // Fungsi untuk merender Kartu Drama
+        // Fungsi untuk merender Kartu Drama (Kini memanggil navigateToDetail saat diklik)
         function renderDramaCards(records) {
             if (records.length === 0) {
                 return `<p class="col-span-full text-center text-xl text-gray-600 p-10"><i class="fas fa-folder-open mr-2"></i> Tidak ada drama yang ditemukan.</p>`;
@@ -163,18 +162,15 @@
                 const tags = book.tags || book.tagNames || [];
                 const bookId = book.bookId || book.bookid;
 
-                // Memaksa Tampilan Total Episode menjadi 100 untuk card
-                const displayedChapterCount = DISPLAY_TOTAL_EPISODES;
-
                 return `
-                    <a href="#" onclick="event.preventDefault(); navigateToDetail('${bookId}', 0, {bookName: '${book.bookName}', introduction: '${(book.introduction || '').replace(/'/g, "\\'")}', chapterCount: ${book.chapterCount || displayedChapterCount}});" 
+                    <a href="#" onclick="event.preventDefault(); navigateToDetail('${bookId}', 0, {bookName: '${book.bookName}', introduction: '${(book.introduction || '').replace(/'/g, "\\'")}'});" 
                        class="block bg-white rounded-xl shadow-xl overflow-hidden cursor-pointer transform hover:scale-[1.03] transition duration-300 ease-in-out hover:shadow-2xl animate-fade-in" style="animation-delay: ${index * 0.05}s;">
                         <div class="relative overflow-hidden">
                             <img src="${book.coverWap || book.cover}" alt="${book.bookName}" 
                                  class="w-full h-64 object-cover transition duration-500 ease-in-out transform hover:scale-105">
                             <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
                                 <p class="text-xs text-white font-semibold">
-                                    <i class="fas fa-video mr-1 text-red-400"></i> ${displayedChapterCount} Eps
+                                    <i class="fas fa-video mr-1 text-red-400"></i> ${book.chapterCount || '??'} Eps
                                 </p>
                             </div>
                             ${book.corner ? `<span class="absolute top-2 right-2 text-xs font-bold px-3 py-1 rounded-full shadow-lg" style="${cornerStyle}">${book.corner.name}</span>` : ""}
@@ -216,71 +212,42 @@
             return bestVideo ? bestVideo.videoPath : null;
         }
 
-        // Menampilkan video player dan daftar episode
+        // Menampilkan video player dan daftar episode (SUDAH DIMODIFIKASI UNTUK NAVIGASI)
         function renderDetailPage(bookData, selectedEpisodeIndex = 0) {
             const episodes = bookData.chapterList || [];
 
             // Pastikan selectedEpisode selalu ada
-            const selectedEpisode = episodes.find(ep => ep.chapterId === (bookData.chapterList[selectedEpisodeIndex]?.chapterId)) || episodes[0];
+            const selectedEpisode = episodes[selectedEpisodeIndex] || episodes[0];
 
-            // Dapatkan URL video dan poster
+            // Dapatkan URL video dan poster dengan pengecekan null yang aman
             const videoUrl = selectedEpisode ? getBestVideoUrl(selectedEpisode) : null;
 
             const videoPoster = selectedEpisode?.chapterImg || bookData.cover || '';
             const episodeName = selectedEpisode?.chapterName || `EP ${selectedEpisodeIndex + 1}`;
 
-            // --- LOGIKA NAVIGASI EPISODE ---
-            const totalEpisodes = DISPLAY_TOTAL_EPISODES; 
-            const actualLoadedEpisodes = episodes.length;
-
+            // --- FUNGSI NAVIGASI EPISODE BARU ---
+            const totalEpisodes = episodes.length;
             const hasPrevious = selectedEpisodeIndex > 0;
-            // Hanya bisa lanjut jika episode selanjutnya sudah dimuat datanya (agar bisa diputar)
-            const hasNext = selectedEpisodeIndex < actualLoadedEpisodes - 1; 
+            const hasNext = selectedEpisodeIndex < totalEpisodes - 1;
 
             const prevEpisodeIndex = hasPrevious ? selectedEpisodeIndex - 1 : selectedEpisodeIndex;
             const nextEpisodeIndex = hasNext ? selectedEpisodeIndex + 1 : selectedEpisodeIndex;
             // ------------------------------------
 
-            const episodeButtons = [];
-            // Buat 100 tombol episode (semua aktif kecuali yang melebihi DISPLAY_TOTAL_EPISODES)
-            for (let index = 0; index < totalEpisodes; index++) {
-                const isEpisodeAvailable = index < actualLoadedEpisodes;
+            const episodeButtons = episodes.map((ep, index) => {
                 const isActive = index === selectedEpisodeIndex;
-                
-                let buttonHtml = '';
-                let buttonClasses = `px-4 py-2 text-sm font-semibold rounded-lg transition duration-200 `;
-                let episodeDisplay = `EP ${index + 1}`;
+                const activeClass = isActive
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-white text-gray-700 hover:bg-blue-50 border border-gray-300';
 
-                if (isActive) {
-                    buttonClasses += 'bg-blue-600 text-white shadow-md';
-                } else if (isEpisodeAvailable) {
-                    // Episode tersedia di cache, bisa diklik
-                    buttonClasses += 'bg-white text-gray-700 hover:bg-blue-50 border border-gray-300';
-                    buttonHtml = `
-                        <button onclick="navigateToDetail('${bookData.bookid}', ${index})" 
-                            class="${buttonClasses}">
-                            ${episodeDisplay}
-                        </button>
-                    `;
-                } else {
-                    // Episode belum tersedia di cache/API, TAPI tetap bisa diklik untuk memicu fetch data (jika API mendukungnya)
-                    // Jika API tidak mendukung fetch per-episode (hanya batch), maka video akan tampil 'Tidak Tersedia'
-                    // Kita tetap membuatnya bisa diklik, tapi dengan warna berbeda
-                    buttonClasses += 'bg-yellow-50 text-yellow-800 hover:bg-yellow-100 border border-yellow-300';
-                    episodeDisplay += ' (?)';
-
-                     buttonHtml = `
-                        <button onclick="navigateToDetail('${bookData.bookid}', ${index})" 
-                            title="Klik untuk memuat episode ini (Data mungkin belum tersedia)"
-                            class="${buttonClasses}">
-                            ${episodeDisplay}
-                        </button>
-                    `;
-                }
-                
-                episodeButtons.push(buttonHtml);
-            }
-
+                // Panggil navigateToDetail dengan episode index yang baru
+                return `
+                <button onclick="navigateToDetail('${bookData.bookid}', ${index})" 
+                    class="px-4 py-2 text-sm font-semibold rounded-lg transition duration-200 ${activeClass}">
+                    ${ep.chapterName || `EP ${index + 1}`}
+                </button>
+            `;
+            }).join('');
 
             mainContainer.innerHTML = `
             <div class="flex items-center mb-6">
@@ -295,13 +262,13 @@
                 <div class="lg:col-span-2">
                     <div class="video-container">
                         ${videoUrl
+                            // Menggunakan variabel videoPoster yang aman
                             ? `<video id="videoPlayer" controls poster="${videoPoster}" class="rounded-xl shadow-2xl" autoplay>
                                     <source src="${videoUrl}" type="video/mp4">
                                     Browser Anda tidak mendukung tag video.
                                 </video>`
-                            : `<div class="w-full h-full flex items-center justify-center bg-gray-800 text-white text-xl font-semibold rounded-xl">
-                                    <i class="fas fa-exclamation-circle mr-3 text-red-400"></i> Video untuk ${episodeName} tidak tersedia.
-                                </div>`
+                            // Menggunakan variabel episodeName yang aman
+                            : `<div class="w-full h-full flex items-center justify-center bg-gray-800 text-white text-lg rounded-xl">Video untuk ${episodeName} tidak tersedia.</div>`
                         }
                     </div>
                     
@@ -316,8 +283,7 @@
                         <button ${!hasNext ? 'disabled' : ''} 
                                 onclick="navigateToDetail('${bookData.bookid}', ${nextEpisodeIndex})"
                                 class="flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg transition duration-200 
-                                    ${hasNext ? 'hover:bg-blue-700' : 'opacity-50 cursor-not-allowed'}"
-                                ${!hasNext ? 'title="Episode selanjutnya belum dimuat datanya"' : ''}>
+                                    ${hasNext ? 'hover:bg-blue-700' : 'opacity-50 cursor-not-allowed'}">
                             Episode Selanjutnya <i class="fas fa-step-forward ml-2"></i>
                         </button>
                     </div>
@@ -331,7 +297,7 @@
                     <h3 class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Daftar Episode (${totalEpisodes} Total)</h3>
                     
                     <div class="flex flex-wrap gap-2 overflow-y-auto-episodes"> 
-                        ${episodeButtons.join('')}
+                        ${episodeButtons}
                     </div>
                 </div>
             </div>
@@ -357,19 +323,15 @@
             mainContainer.innerHTML = `<h1 class="text-3xl font-extrabold text-gray-900 mb-6">Memuat Drama Detail (Episode ${episodeNumber})...</h1>${generateSkeletonCards(1)}`;
 
             // 2. Cek Cache. Jika chapterList sudah ada, gunakan cache untuk menghindari fetch API
-            // NOTE: Meskipun kita menggunakan cache, kita tetap memanggil API karena API ini hanya memberikan video stream untuk episode yang diminta.
-            // Namun, untuk navigasi episode, kita butuh chapterList lengkap (yang biasanya dimuat dari episode 1).
-            const cachedData = cachedBookData[bookId];
-            if (cachedData && cachedData.chapterList) {
-                // Render halaman detail dengan episode yang diminta dari cache
-                renderDetailPage(cachedData, episodeIndex);
-                // Kita tetap Lanjut fetch untuk mendapatkan chapterList terbaru dan detail video episode yang diminta
+            if (cachedBookData[bookId] && cachedBookData[bookId].chapterList) {
+                // Data sudah lengkap, hanya perlu render ulang dengan episode yang diminta
+                renderDetailPage(cachedBookData[bookId], episodeIndex);
+                return;
             }
 
-
-            // 3. Lakukan Fetch API untuk mendapatkan detail video episode yang diminta
+            // 3. Jika belum ada di cache, lakukan Fetch API
             try {
-                // Panggil API dengan episode yang diklik (episodeNumber)
+                // Panggil API dengan episode yang diklik (episodeNumber) atau episode 1 (default) 
                 const response = await fetch(`${API_BASE}/stream?bookid=${bookId}&episode=${episodeNumber}`);
                 const json = await response.json();
 
@@ -380,19 +342,15 @@
                         bookid: bookId,
                         bookName: initialMetadata.bookName || chapterData.bookName || "Nama Drama Tidak Diketahui",
                         introduction: initialMetadata.introduction || chapterData.introduction || "Deskripsi tidak tersedia.",
-                        cover: initialMetadata.cover || chapterData.cover,
                         chapterList: chapterData.chapterList, // chapterList LENGKAP
                     };
 
-                    // Simpan ke cache (menimpa atau menambahkan data baru)
+                    // Simpan ke cache
                     cachedBookData[bookId] = bookMetadata;
 
                     // Render halaman detail dengan episode yang diminta
                     renderDetailPage(bookMetadata, episodeIndex);
 
-                } else if (cachedData && cachedData.chapterList) {
-                     // Jika gagal fetch episode baru, gunakan data cache yang sudah ada (tapi video akan 'Tidak Tersedia')
-                    renderDetailPage(cachedData, episodeIndex);
                 } else {
                     mainContainer.innerHTML = `<p class='col-span-full text-center text-xl text-gray-600 p-10'><i class='fas fa-exclamation-triangle mr-2'></i> Gagal memuat detail episode untuk BookID: ${bookId}.</p>`;
                 }
@@ -727,4 +685,3 @@
 
 
 </html>
-
