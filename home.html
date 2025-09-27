@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DramaBox - App Tunggal</title>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        'skeleton': 'skeleton 1.5s ease-in-out infinite',
+                        'fade-in': 'fadeIn 0.5s ease-out'
+                    },
+                    keyframes: {
+                        skeleton: {
+                            '0%, 100%': { opacity: '0.4' },
+                            '50%': { opacity: '1' },
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Gaya kustom untuk memastikan video player di tengah dan responsif */
+        .video-container {
+            position: relative;
+            padding-bottom: 56.25%;
+            /* 16:9 Aspect Ratio */
+            height: 0;
+            overflow: hidden;
+            max-width: 100%;
+            background: #000;
+            border-radius: 0.75rem;
+            /* rounded-xl */
+        }
+
+        .video-container video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen antialiased">
+
+    <header class="bg-blue-800 text-white shadow-lg sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center py-4">
+            <div class="text-2xl font-extrabold tracking-tight cursor-pointer" onclick="navigateTo('home')">
+                <i class="fas fa-play-circle mr-2 text-blue-300"></i>DramaBox
+            </div>
+
+            <nav id="nav-desktop" class="hidden md:flex items-center space-x-6">
+                <a href="#" class="nav-link mx-3" data-page="home">Home</a>
+                <a href="#" class="nav-link mx-3" data-page="latest">Latest</a>
+                <a href="#" class="nav-link mx-3" data-page="genre">Genre</a>
+                <div class="relative w-64">
+                    <input type="text" id="search-input-desktop" placeholder="Cari drama..."
+                        class="py-1.5 pl-3 pr-10 text-sm rounded-full bg-blue-700 placeholder-blue-300 text-white focus:outline-none focus:ring-2 focus:ring-blue-300 w-full"
+                        onkeydown="handleSearchEnter(event)">
+                    <button class="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-300 hover:text-white"
+                        onclick="triggerSearch()">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </nav>
+
+            <div class="md:hidden flex items-center space-x-3">
+                <button id="search-button-mobile" class="text-xl p-1 focus:outline-none" aria-label="Toggle search">
+                    <i class="fas fa-search"></i>
+                </button>
+                <button id="menu-button" class="text-2xl p-1 focus:outline-none" aria-label="Toggle menu">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+        </div>
+
+        <div id="search-mobile-container" class="hidden px-4 py-2 bg-blue-700">
+            <div class="relative">
+                <input type="text" id="search-input-mobile" placeholder="Cari drama..."
+                    class="py-2 pl-4 pr-10 text-sm rounded-lg bg-blue-600 placeholder-blue-300 text-white focus:outline-none focus:ring-2 focus:ring-blue-300 w-full"
+                    onkeydown="handleSearchEnter(event)">
+                <button class="absolute right-3 top-1/2 transform -translate-y-1/2 text-blue-300 hover:text-white"
+                    onclick="triggerSearch(true)">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </div>
+
+        <nav id="nav-mobile" class="hidden pb-2"
+            style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease-in-out;">
+            <a href="#" class="nav-link block px-4 py-2 hover:bg-blue-700 transition duration-300 text-sm font-medium"
+                data-page="home">Home</a>
+            <a href="#" class="nav-link block px-4 py-2 hover:bg-blue-700 transition duration-300 text-sm font-medium"
+                data-page="latest">Latest</a>
+            <a href="#" class="nav-link block px-4 py-2 hover:bg-blue-700 transition duration-300 text-sm font-medium"
+                data-page="genre">Genre</a>
+        </nav>
+    </header>
+
+    <main id="app-main" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    </main>
+
+    <script>
+        const API_BASE = "https://api-dramabox.vercel.app/api/dramabox";
+        const mainContainer = document.getElementById("app-main");
+        const navLinks = document.querySelectorAll(".nav-link");
+        const menuButton = document.getElementById("menu-button");
+        const navMobile = document.getElementById("nav-mobile");
+        const searchInputDesktop = document.getElementById("search-input-desktop");
+        const searchInputMobile = document.getElementById("search-input-mobile");
+        const searchButtonMobile = document.getElementById("search-button-mobile");
+        const searchMobileContainer = document.getElementById("search-mobile-container");
+
+        let allRecords = [];
+        let currentPage = 1;
+        const perPage = 10;
+        const maxPagesToShow = 5;
+        let cachedBookData = {}; // Cache untuk menyimpan daftar bab (chapterList) agar tidak perlu fetch berulang kali.
+
+        // --- UTILITY FUNCTIONS & RENDER ---
+
+        function generateSkeletonCards(count) {
+            let html = '';
+            for (let i = 0; i < count; i++) {
+                html += `
+                    <div class="bg-white rounded-xl shadow-lg overflow-hidden animate-fade-in">
+                        <div class="w-full h-64 bg-gray-200 animate-skeleton"></div>
+                        <div class="p-4 space-y-3">
+                            <div class="h-4 bg-gray-200 rounded w-3/4 animate-skeleton"></div>
+                            <div class="h-3 bg-gray-200 rounded w-full animate-skeleton"></div>
+                            <div class="h-3 bg-gray-200 rounded w-5/6 animate-skeleton"></div>
+                            <div class="mt-4 flex flex-wrap gap-1">
+                                <span class="h-5 w-12 bg-gray-200 rounded-full animate-skeleton"></span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            return html;
+        }
+
+        // Fungsi untuk merender Kartu Drama (Kini memanggil navigateToDetail saat diklik)
+        function renderDramaCards(records) {
+            if (records.length === 0) {
+                return `<p class="col-span-full text-center text-xl text-gray-600 p-10"><i class="fas fa-folder-open mr-2"></i> Tidak ada drama yang ditemukan.</p>`;
+            }
+
+            return records.map((book, index) => {
+                const cornerStyle = book.corner ? `background-color: ${book.corner.color || '#3b82f6'}; color:white;` : '';
+                const tags = book.tags || book.tagNames || [];
+                const bookId = book.bookId || book.bookid;
+
+                return `
+                    <a href="#" onclick="event.preventDefault(); navigateToDetail('${bookId}', 0, {bookName: '${book.bookName}', introduction: '${(book.introduction || '').replace(/'/g, "\\'")}'});" 
+                       class="block bg-white rounded-xl shadow-xl overflow-hidden cursor-pointer transform hover:scale-[1.03] transition duration-300 ease-in-out hover:shadow-2xl animate-fade-in" style="animation-delay: ${index * 0.05}s;">
+                        <div class="relative overflow-hidden">
+                            <img src="${book.coverWap || book.cover}" alt="${book.bookName}" 
+                                 class="w-full h-64 object-cover transition duration-500 ease-in-out transform hover:scale-105">
+                            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3">
+                                <p class="text-xs text-white font-semibold">
+                                    <i class="fas fa-video mr-1 text-red-400"></i> ${book.chapterCount || '??'} Eps
+                                </p>
+                            </div>
+                            ${book.corner ? `<span class="absolute top-2 right-2 text-xs font-bold px-3 py-1 rounded-full shadow-lg" style="${cornerStyle}">${book.corner.name}</span>` : ""}
+                        </div>
+                        <div class="p-4">
+                            <h2 class="text-lg font-bold text-gray-900 mb-1 truncate">${book.bookName}</h2>
+                            <p class="text-gray-600 text-sm mb-3 line-clamp-2">${book.introduction?.substring(0, 70) || 'Deskripsi tidak tersedia.'}...</p>
+                            
+                            <div class="flex items-center justify-between text-xs text-gray-500">
+                                <span><i class="fas fa-eye mr-1"></i> ${new Intl.NumberFormat('id-ID').format(book.playCount || 0)}</span>
+                                <span class="text-green-600 font-semibold"><i class="fas fa-star mr-1"></i> ${book.rating || 'N/A'}</span>
+                            </div>
+
+                            <div class="mt-3 flex flex-wrap gap-1.5">
+                                ${tags.slice(0, 2).map(tag =>
+                    `<span class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-medium transition duration-300 hover:bg-blue-200">${tag}</span>`
+                ).join("")}
+                            </div>
+                        </div>
+                    </a>
+                `;
+            }).join("");
+        }
+
+        // --- DETAIL & VIDEO PLAYER FUNCTIONS ---
+        // Menampilkan video player dan daftar episode
+        function renderDetailPage(bookData, selectedEpisodeIndex = 0) {
+            const episodes = bookData.chapterList || [];
+
+            // Pastikan selectedEpisode selalu ada (episode yang dipilih, atau episode 0 sebagai fallback)
+            const selectedEpisode = episodes[selectedEpisodeIndex] || episodes[0];
+
+            // Dapatkan URL video dan poster dengan pengecekan null yang aman
+            const videoUrl = selectedEpisode ? getBestVideoUrl(selectedEpisode) : null;
+
+            // --- PERBAIKAN 1: Menambahkan Fallback yang Aman untuk Poster dan Nama ---
+            const videoPoster = selectedEpisode?.chapterImg || bookData.cover || '';
+            const episodeName = selectedEpisode?.chapterName || `EP ${selectedEpisodeIndex + 1}`;
+
+            const episodeButtons = episodes.map((ep, index) => {
+                const isActive = index === selectedEpisodeIndex;
+                const activeClass = isActive
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-white text-gray-700 hover:bg-blue-50 border border-gray-300';
+
+                // Panggil navigateToDetail dengan episode index yang baru
+                return `
+            <button onclick="navigateToDetail('${bookData.bookid}', ${index})" 
+                class="px-4 py-2 text-sm font-semibold rounded-lg transition duration-200 ${activeClass}">
+                ${ep.chapterName || `EP ${index + 1}`}
+            </button>
+        `;
+            }).join('');
+
+            mainContainer.innerHTML = `
+        <div class="flex items-center mb-6">
+            <button onclick="navigateTo('home')" class="text-blue-600 hover:text-blue-800 mr-3 text-lg">
+                <i class="fas fa-arrow-left"></i> Kembali ke Beranda
+            </button>
+        </div>
+
+        <h1 class="text-3xl font-extrabold text-gray-900 mb-6">${bookData.bookName}</h1>
+
+        <div class="grid lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-2">
+                <div class="video-container">
+                    ${videoUrl
+                    // Menggunakan variabel videoPoster yang aman
+                    ? `<video controls poster="${videoPoster}" class="rounded-xl shadow-2xl" autoplay>
+                                <source src="${videoUrl}" type="video/mp4">
+                                Browser Anda tidak mendukung tag video.
+                            </video>`
+                    // Menggunakan variabel episodeName yang aman
+                    : `<div class="w-full h-full flex items-center justify-center bg-gray-800 text-white text-lg rounded-xl">Video untuk ${episodeName} tidak tersedia.</div>`
+                }
+                </div>
+                
+                <div class="mt-6 p-6 bg-white rounded-xl shadow-lg">
+                    <h2 class="text-xl font-bold text-gray-900 mb-3">${episodeName}</h2>
+                    <p class="text-gray-600 text-sm line-clamp-4">${bookData.introduction || 'Tidak ada deskripsi drama.'}</p>
+                </div>
+            </div>
+            
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg">
+                <h3 class="text-xl font-bold text-gray-900 mb-4 border-b pb-2">Daftar Episode (${episodes.length} Total)</h3>
+                
+                <div class="flex flex-wrap gap-2 overflow-y-auto-episodes"> 
+                    ${episodeButtons}
+                </div>
+            </div>
+        </div>
+    `;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        // Fungsi untuk memilih URL video kualitas terbaik (default 720p)
+        function getBestVideoUrl(episode) {
+            if (!episode || !episode.cdnList || episode.cdnList.length === 0) return null;
+
+            // Cari CDN default atau CDN pertama
+            const defaultCdn = episode.cdnList.find(cdn => cdn.isDefault === 1) || episode.cdnList[0];
+            if (!defaultCdn || !defaultCdn.videoPathList) return null;
+
+            // Cari kualitas 720p non-VIP sebagai default, atau kualitas tertinggi yang tersedia
+            let bestVideo = defaultCdn.videoPathList.find(v => v.quality === 720 && v.isVipEquity === 0)
+                || defaultCdn.videoPathList.find(v => v.isDefault === 1)
+                || defaultCdn.videoPathList[0];
+
+            return bestVideo ? bestVideo.videoPath : null;
+        }
+
+
+        // MODIFIKASI FUNGSI fetchDetailData
+        async function fetchDetailData(bookId, episodeIndex = 0, initialMetadata = {}) {
+            // Nomor episode yang diminta (API biasanya dimulai dari 1)
+            const episodeNumber = episodeIndex + 1;
+
+            // 1. Tampilkan loading state (perlu dilakukan sebelum cek cache untuk respons cepat)
+            mainContainer.innerHTML = `<h1 class="text-3xl font-extrabold text-gray-900 mb-6">Memuat Drama Detail (Episode ${episodeNumber})...</h1>${generateSkeletonCards(1)}`;
+
+            // 2. Cek Cache. Jika chapterList sudah ada, gunakan cache untuk menghindari fetch API
+            if (cachedBookData[bookId] && cachedBookData[bookId].chapterList) {
+                // Data sudah lengkap, hanya perlu render ulang dengan episode yang diminta
+                renderDetailPage(cachedBookData[bookId], episodeIndex);
+                return;
+            }
+
+            // 3. Jika belum ada di cache, lakukan Fetch API
+            try {
+                // --- PERUBAHAN KRITIS DI SINI ---
+                // Panggil API dengan episode yang diklik (episodeNumber) atau episode 1 (default) 
+                // untuk mendapatkan data detail buku dan chapterList lengkap.
+                // NOTE: Kita asumsikan API mengembalikan chapterList LENGKAP di fetch ini.
+                const response = await fetch(`${API_BASE}/stream?bookid=${bookId}&episode=${episodeNumber}`);
+                const json = await response.json();
+
+                if (json.data && json.data.chapterList) {
+                    const chapterData = json.data;
+
+                    let bookMetadata = {
+                        bookid: bookId,
+                        bookName: initialMetadata.bookName || chapterData.bookName || "Nama Drama Tidak Diketahui",
+                        introduction: initialMetadata.introduction || chapterData.introduction || "Deskripsi tidak tersedia.",
+                        chapterList: chapterData.chapterList, // chapterList LENGKAP
+                    };
+
+                    // Simpan ke cache
+                    cachedBookData[bookId] = bookMetadata;
+
+                    // Render halaman detail dengan episode yang diminta
+                    renderDetailPage(bookMetadata, episodeIndex);
+
+                } else {
+                    mainContainer.innerHTML = `<p class='col-span-full text-center text-xl text-gray-600 p-10'><i class='fas fa-exclamation-triangle mr-2'></i> Gagal memuat detail episode untuk BookID: ${bookId}.</p>`;
+                }
+            } catch (err) {
+                console.error("Error fetching detail data:", err);
+                mainContainer.innerHTML = `<p class="col-span-full text-center text-xl text-red-600 p-10"><i class="fas fa-server mr-2"></i> Gagal terhubung atau kesalahan server saat memuat detail.</p>`;
+            }
+        }
+        // --- NAVIGATION & EVENT LISTENERS ---
+
+        // Fungsi baru untuk navigasi ke detail drama
+        function navigateToDetail(bookId, episodeIndex = 0, initialMetadata = {}) {
+            // Tutup menu dan search bar mobile sebelum navigasi
+            toggleMobileMenu(false);
+            toggleMobileSearchBar(false);
+            updateActiveNav(null); // Bersihkan navigasi aktif
+            fetchDetailData(bookId, episodeIndex, initialMetadata);
+        }
+
+        function updateActiveNav(activePage) {
+            navLinks.forEach(link => {
+                const page = link.getAttribute('data-page');
+                link.classList.remove('font-bold', 'text-blue-200', 'border-b-2', 'border-blue-200', 'pb-1');
+                link.classList.add('font-medium', 'hover:text-blue-200');
+
+                if (page === activePage) {
+                    link.classList.add('font-bold', 'text-blue-200', 'border-b-2', 'border-blue-200', 'pb-1');
+                    link.classList.remove('font-medium', 'hover:text-blue-200');
+                }
+            });
+        }
+
+        // Fungsi utama navigasi (Home, Latest, Genre)
+        function navigateTo(page) {
+            toggleMobileMenu(false);
+            toggleMobileSearchBar(false);
+
+            updateActiveNav(page);
+            if (page === 'home') {
+                fetchHomeData();
+            } else if (page === 'latest') {
+                fetchLatestData();
+            } else {
+                mainContainer.innerHTML = `<h2 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-blue-400 pb-2">Halaman ${page.charAt(0).toUpperCase() + page.slice(1)}</h2><p class="text-center text-gray-500 p-10">Konten halaman ${page} akan datang!</p>`;
+            }
+        }
+
+        // (Fungsi toggleMobileMenu dan toggleMobileSearchBar dari jawaban sebelumnya)
+        function toggleMobileMenu(forceOpen) {
+            const isHidden = navMobile.classList.contains('hidden');
+            const shouldOpen = forceOpen !== undefined ? forceOpen : isHidden;
+
+            if (shouldOpen) {
+                navMobile.classList.remove('hidden');
+                setTimeout(() => {
+                    navMobile.style.maxHeight = navMobile.scrollHeight + "px";
+                    menuButton.querySelector('i').className = 'fas fa-times';
+                }, 10);
+            } else {
+                navMobile.style.maxHeight = '0px';
+                menuButton.querySelector('i').className = 'fas fa-bars';
+                setTimeout(() => {
+                    navMobile.classList.add('hidden');
+                }, 300);
+            }
+        }
+
+        function toggleMobileSearchBar(forceOpen) {
+            const isHidden = searchMobileContainer.classList.contains('hidden');
+            const shouldOpen = forceOpen !== undefined ? forceOpen : isHidden;
+
+            if (shouldOpen) {
+                searchMobileContainer.classList.remove('hidden');
+                searchInputMobile.focus();
+            } else {
+                searchMobileContainer.classList.add('hidden');
+            }
+        }
+
+        // (Fungsi triggerSearch dan handleSearchEnter dari jawaban sebelumnya)
+        function triggerSearch(isMobile = false) {
+            const inputElement = isMobile ? searchInputMobile : searchInputDesktop;
+            const query = inputElement.value.trim();
+            if (query) {
+                toggleMobileMenu(false);
+                toggleMobileSearchBar(false);
+                fetchSearchData(query);
+            } else {
+                alert("Silakan masukkan kata kunci pencarian.");
+            }
+        }
+
+        function handleSearchEnter(event) {
+            if (event.key === 'Enter') {
+                const isMobile = event.target.id === 'search-input-mobile';
+                triggerSearch(isMobile);
+            }
+        }
+
+        // --- FETCHING DATA FUNCTIONS (Home, Latest, Search) ---
+
+        // Fungsi untuk membuat tombol pagination (untuk Latest)
+        function createPaginationButton(text, page, isActive = false, isDisabled = false) {
+            const btn = document.createElement("button");
+            btn.innerHTML = text;
+
+            let classes = `px-4 py-2 mx-0.5 rounded-lg font-semibold transition duration-300 border shadow-sm text-sm `;
+
+            if (isActive) {
+                classes += "bg-blue-600 text-white border-blue-600 hover:bg-blue-700 transform scale-105";
+            } else if (isDisabled) {
+                classes += "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-300";
+                btn.disabled = true;
+            } else if (text === '...') {
+                classes += "bg-white text-gray-500 border-gray-300 cursor-default";
+                btn.disabled = true;
+            } else {
+                classes += "bg-white text-gray-700 border-gray-300 hover:bg-gray-100 hover:shadow-md";
+                btn.addEventListener("click", () => renderLatestPage(page));
+            }
+
+            btn.className = classes.trim();
+            return btn;
+        }
+
+        // Render tombol pagination untuk halaman Latest
+        function renderPagination() {
+            const paginationContainer = document.getElementById("pagination");
+            if (!paginationContainer) return;
+
+            paginationContainer.innerHTML = "";
+            const totalPages = Math.ceil(allRecords.length / perPage);
+
+            if (totalPages <= 1) return;
+
+            // 1. Tombol Previous
+            const prevBtn = createPaginationButton('<i class="fas fa-chevron-left"></i> Previous', currentPage - 1, false, currentPage === 1);
+            paginationContainer.appendChild(prevBtn);
+
+            // 2. Logika Tombol Angka (Cerdas dengan maxPagesToShow = 5)
+            const pages = [];
+            pages.push(1);
+
+            let start = Math.max(2, currentPage - Math.floor(maxPagesToShow / 2) + 1);
+            let end = Math.min(totalPages - 1, currentPage + Math.floor(maxPagesToShow / 2));
+
+            if (currentPage <= Math.floor(maxPagesToShow / 2) + 1) {
+                end = Math.min(totalPages - 1, maxPagesToShow);
+            } else if (currentPage >= totalPages - Math.floor(maxPagesToShow / 2)) {
+                start = Math.max(2, totalPages - maxPagesToShow + 1);
+            }
+
+            if (start > 2) pages.push('...');
+            for (let i = start; i <= end; i++) {
+                if (i !== 1 && i !== totalPages) pages.push(i);
+            }
+            if (end < totalPages - 1) pages.push('...');
+
+            if (totalPages > 1 && !pages.includes(totalPages)) pages.push(totalPages);
+
+
+            // Render tombol angka
+            pages.forEach(pageNumber => {
+                if (pageNumber === '...') {
+                    paginationContainer.appendChild(createPaginationButton('...', null, false, false));
+                } else {
+                    paginationContainer.appendChild(createPaginationButton(pageNumber, pageNumber, pageNumber === currentPage));
+                }
+            });
+
+            // 3. Tombol Next
+            const nextBtn = createPaginationButton('Next <i class="fas fa-chevron-right"></i>', currentPage + 1, false, currentPage === totalPages);
+            paginationContainer.appendChild(nextBtn);
+        }
+
+        // Render Page "Latest" dengan Pagination
+        function renderLatestPage(page = 1) {
+            currentPage = page;
+            const start = (page - 1) * perPage;
+            const end = start + perPage;
+            const pageRecords = allRecords.slice(start, end);
+
+            mainContainer.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-blue-400 pb-2">Drama Terbaru 🚀</h2>
+                <div id="latestContainer" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 mb-10">
+                    ${renderDramaCards(pageRecords)}
+                </div>
+                <div id="pagination" class="flex justify-center gap-1.5"></div>
+            `;
+
+            renderPagination();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Fetch data untuk halaman Latest
+        async function fetchLatestData() {
+            mainContainer.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-blue-400 pb-2">Drama Terbaru 🚀</h2>
+                <div id="latestContainer" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 mb-10">
+                    ${generateSkeletonCards(perPage)}
+                </div>
+                <div id="pagination" class="flex justify-center gap-1.5"></div>
+            `;
+
+            try {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const response = await fetch(`${API_BASE}/latest`);
+                const json = await response.json();
+
+                if (json.data && json.data.classifyBookList && json.data.classifyBookList.records) {
+                    allRecords = json.data.classifyBookList.records;
+                    renderLatestPage(1);
+                } else {
+                    mainContainer.innerHTML = "<p class='col-span-full text-center text-xl text-gray-600 p-10'><i class='fas fa-folder-open mr-2'></i> Tidak ada data terbaru yang tersedia saat ini.</p>";
+                }
+            } catch (err) {
+                console.error(err);
+                mainContainer.innerHTML = "<p class='col-span-full text-center text-xl text-red-600 p-10'><i class='fas fa-server mr-2'></i> Gagal terhubung ke server. Pastikan server lokal berjalan (http://localhost:3000).</p>";
+            }
+        }
+
+        // Render Page "Home" (tanpa Pagination)
+        function renderHomePage(data) {
+            mainContainer.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-blue-400 pb-2">Untuk Anda</h2>
+                <div id="homeContainer" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
+                    ${renderDramaCards(data)}
+                </div>
+            `;
+        }
+
+        // Fetch data untuk halaman Home
+        async function fetchHomeData() {
+            mainContainer.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-blue-400 pb-2">Untuk Anda</h2>
+                <div id="homeContainer" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
+                    ${generateSkeletonCards(10)}
+                </div>
+            `;
+
+            try {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const response = await fetch(`${API_BASE}/home`);
+                const json = await response.json();
+
+                let allBooks = [];
+                if (json.data && json.data.columnVoList) {
+                    json.data.columnVoList.forEach(column => {
+                        if (column.bookList) {
+                            allBooks = allBooks.concat(column.bookList);
+                        }
+                    });
+                }
+
+                if (allBooks.length > 0) {
+                    renderHomePage(allBooks);
+                } else {
+                    mainContainer.innerHTML = `<p class="col-span-full text-center text-xl text-gray-600 p-10"><i class="fas fa-folder-open mr-2"></i> Tidak ada drama yang tersedia saat ini.</p>`;
+                }
+
+            } catch (err) {
+                console.error(err);
+                mainContainer.innerHTML = `<p class="col-span-full text-center text-xl text-red-600 p-10"><i class="fas fa-server mr-2"></i> Gagal terhubung ke server. Pastikan server lokal berjalan (http://localhost:3000).</p>`;
+            }
+        }
+
+        function renderSearchResult(query, results) {
+            mainContainer.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-blue-400 pb-2">Hasil Pencarian untuk: "${query}"</h2>
+                <div id="searchContainer" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
+                    ${renderDramaCards(results)}
+                </div>
+                <div id="pagination" class="flex justify-center gap-1.5"></div>
+            `;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function fetchSearchData(query) {
+            updateActiveNav(null);
+
+            mainContainer.innerHTML = `
+                <h2 class="text-3xl font-bold text-gray-800 mb-6 border-b-2 border-blue-400 pb-2">Mencari: "${query}"</h2>
+                <div id="searchContainer" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
+                    ${generateSkeletonCards(10)}
+                </div>
+            `;
+
+            try {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const encodedQuery = encodeURIComponent(query);
+                const response = await fetch(`${API_BASE}/search?query=${encodedQuery}`);
+                const json = await response.json();
+
+                let searchResults = [];
+                if (json.data && json.data.suggestList) {
+                    searchResults = json.data.suggestList;
+                }
+
+                renderSearchResult(query, searchResults);
+
+            } catch (err) {
+                console.error(err);
+                mainContainer.innerHTML = `<p class="col-span-full text-center text-xl text-red-600 p-10"><i class="fas fa-server mr-2"></i> Gagal terhubung ke server atau terjadi kesalahan saat mencari.</p>`;
+            }
+        }
+
+        // --- EVENT LISTENERS INITIALIZATION ---
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const page = e.target.getAttribute('data-page');
+                navigateTo(page);
+            });
+        });
+
+        menuButton.addEventListener('click', () => {
+            toggleMobileSearchBar(false);
+            toggleMobileMenu();
+        });
+
+        searchButtonMobile.addEventListener('click', () => {
+            toggleMobileMenu(false);
+            toggleMobileSearchBar();
+        });
+
+        // Load halaman default (Home) saat aplikasi dimuat
+        navigateTo('home');
+    </script>
+
+</body>
+
+</html>
