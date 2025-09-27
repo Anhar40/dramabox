@@ -226,7 +226,7 @@
             const episodeName = selectedEpisode?.chapterName || `EP ${selectedEpisodeIndex + 1}`;
 
             // --- FUNGSI NAVIGASI EPISODE BARU ---
-            const totalEpisodes = episodes.length;
+            const totalEpisodes = episodes.chapterCount;
             const hasPrevious = selectedEpisodeIndex > 0;
             const hasNext = selectedEpisodeIndex < totalEpisodes - 1;
 
@@ -685,3 +685,4 @@
 
 
 </html>
+
